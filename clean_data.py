@@ -1,3 +1,4 @@
+
 import pandas as pd
 import numpy as np
 import os
@@ -10,9 +11,7 @@ print("="*60)
 # ==========================================================
 # LOAD DATASET
 # ==========================================================
-
-file_path = "input/master_education_data.csv"
-
+file_path = "input/master_education_data_realistic.csv"
 df = pd.read_csv(file_path)
 
 print("\nDataset Loaded Successfully")
@@ -22,175 +21,132 @@ print("Columns :", df.shape[1])
 # ==========================================================
 # DATA TYPES
 # ==========================================================
-
 print("\nData Types")
 print(df.dtypes)
 
-
 # ==========================================================
-# MISSING VALUES
+# MISSING VALUES BEFORE CLEANING
 # ==========================================================
-
 print("\nMissing Values Before Cleaning")
 print(df.isnull().sum())
 
-# Numeric Columns
+# ==========================================================
+# FILL MISSING VALUES
+# ==========================================================
+def fill_missing_values(df):
 
-numeric_columns = df.select_dtypes(include=np.number).columns
+    numeric_columns = df.select_dtypes(include=np.number).columns
 
-for col in numeric_columns:
+    for col in numeric_columns:
+        df[col] = df[col].fillna(df[col].median())
 
-    df[col] = df[col].fillna(df[col].median())
+    categorical_columns = df.select_dtypes(include="object").columns
 
-# Categorical Columns
+    for col in categorical_columns:
+        df[col] = df[col].fillna(df[col].mode()[0])
 
-categorical_columns = df.select_dtypes(include="object").columns
+    return df
 
-for col in categorical_columns:
-
-    mode = df[col].mode()
-
-    if len(mode) > 0:
-        df[col] = df[col].fillna(mode[0])
+df = fill_missing_values(df)
 
 # ==========================================================
 # REMOVE EXTRA SPACES
 # ==========================================================
+def clean_text(df):
 
-for col in categorical_columns:
+    categorical_columns = df.select_dtypes(include="object").columns
 
-    df[col] = (
-        df[col]
-        .astype(str)
-        .str.strip()
-        .str.title()
-    )
+    for col in categorical_columns:
+        df[col] = df[col].astype(str).str.strip().str.title()
+
+    return df
+
+df = clean_text(df)
 
 # ==========================================================
 # DATE CONVERSION
 # ==========================================================
-
-if "EnrollmentDate" in df.columns:
-
-    df["EnrollmentDate"] = pd.to_datetime(
-        df["EnrollmentDate"],
-        errors="coerce",
-        dayfirst=True
-    )
+if "Assessment_Date" in df.columns:
+    df["Assessment_Date"] = pd.to_datetime(df["Assessment_Date"], errors="coerce")
 
 # ==========================================================
-# VALIDATIONS
+# VALIDATION
 # ==========================================================
+def validate_data(df):
 
-if "Attendance" in df.columns:
+    if "Attendance" in df.columns:
+        df.loc[(df["Attendance"] < 0) | (df["Attendance"] > 100), "Attendance"] = np.nan
+        df["Attendance"] = df["Attendance"].fillna(df["Attendance"].median())
 
-    df["Attendance"] = df["Attendance"].clip(0,100)
+    if "Age" in df.columns:
+        df.loc[(df["Age"] < 15) | (df["Age"] > 70), "Age"] = np.nan
+        df["Age"] = df["Age"].fillna(df["Age"].median())
 
-if "Feedback" in df.columns:
+    if "Feedback" in df.columns:
+        df.loc[(df["Feedback"] < 1) | (df["Feedback"] > 5), "Feedback"] = np.nan
+        df["Feedback"] = df["Feedback"].fillna(df["Feedback"].median())
 
-    df["Feedback"] = df["Feedback"].clip(1,5)
+    if "Completion_Pct" in df.columns:
+        df.loc[(df["Completion_Pct"] < 0) | (df["Completion_Pct"] > 100), "Completion_Pct"] = np.nan
+        df["Completion_Pct"] = df["Completion_Pct"].fillna(df["Completion_Pct"].median())
 
-if "Age" in df.columns:
+    if "Learning_Hours" in df.columns:
+        df.loc[df["Learning_Hours"] < 0, "Learning_Hours"] = np.nan
+        df["Learning_Hours"] = df["Learning_Hours"].fillna(df["Learning_Hours"].median())
 
-    df["Age"] = df["Age"].clip(15,70)
+    return df
 
-if "CompletionPercentage" in df.columns:
-
-    df["CompletionPercentage"] = df["CompletionPercentage"].clip(0,100)
+df = validate_data(df)
 
 # ==========================================================
-# REMOVE NEGATIVE VALUES
+# EMPTY STRING HANDLING
 # ==========================================================
-
-for col in numeric_columns:
-
-    if df[col].min() < 0:
-
-        df[col] = df[col].clip(lower=0)
-
-# ==========================================================
-# REMOVE EMPTY STRINGS
-# ==========================================================
+categorical_columns = df.select_dtypes(include="object").columns
 
 for col in categorical_columns:
-
     df[col] = df[col].replace("", np.nan)
-
-    mode = df[col].mode()
-
-    if len(mode)>0:
-
-        df[col] = df[col].fillna(mode[0])
+    df[col] = df[col].fillna(df[col].mode()[0])
 
 # ==========================================================
-# MISSING VALUES AFTER CLEANING
+# AFTER CLEANING
 # ==========================================================
-
 print("\nMissing Values After Cleaning")
-
 print(df.isnull().sum())
-# ==========================================================
-# REMOVE DUPLICATES
-# ==========================================================
 
+# ==========================================================
+# DUPLICATES
+# ==========================================================
 duplicates = df.duplicated().sum()
 
 print("\nDuplicate Rows :", duplicates)
 
 df = df.drop_duplicates()
 
-print("After Removing Duplicates :", df.shape)
+print("Rows After Removing Duplicates :", df.shape[0])
 
 # ==========================================================
 # SUMMARY
 # ==========================================================
-
 print("\nCleaning Summary")
-
 print("Rows :", df.shape[0])
-
 print("Columns :", df.shape[1])
-
 print("Duplicates :", df.duplicated().sum())
-
 print("Total Missing Values :", df.isnull().sum().sum())
 
 # ==========================================================
-# OUTPUT FOLDER
+# SAVE FILES
 # ==========================================================
-
 os.makedirs("output", exist_ok=True)
 
-# ==========================================================
-# SAVE CSV
-# ==========================================================
-
-csv_path = "output/Clean_Master_Education_Data.csv"
-
-df.to_csv(csv_path,index=False)
-
-# ==========================================================
-# SAVE EXCEL
-# ==========================================================
-
-excel_path = "output/Clean_Master_Education_Data.xlsx"
-
-df.to_excel(excel_path,index=False)
-
-# ==========================================================
-# FINAL
-# ==========================================================
+df.to_csv("output/Clean_Master_Education_Data.csv", index=False)
+df.to_excel("output/Clean_Master_Education_Data.xlsx", index=False)
 
 print("\nFiles Saved Successfully")
-
-print(csv_path)
-
-print(excel_path)
+print("output/Clean_Master_Education_Data.csv")
+print("output/Clean_Master_Education_Data.xlsx")
 
 print("\nFirst Five Rows")
-
 print(df.head())
 
 print("\nDataset Cleaning Completed Successfully")
-
 print("="*60)
